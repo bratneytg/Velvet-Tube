@@ -40,9 +40,10 @@
   <main class="grid">
     <!-- ================= REPRODUCTOR ================= -->
     <section class="panel reproductor" aria-label="Reproductor">
-      <!-- El vídeo de YouTube es la "portada". Se muestra siempre: las condiciones de YouTube no permiten ocultar el reproductor. -->
-      <div class="portada">
+      <!-- Por defecto el vídeo de YouTube queda tapado por la miniatura de la canción (solo se oye el audio); el botón de abajo lo muestra. -->
+      <div class="portada oculta" id="portada">
         <div id="ytPlayer"></div>
+        <div id="miniatura" class="miniatura"></div>
         <button id="btnTocar" class="tocar" hidden data-i18n="tocarContinuar"></button>
       </div>
       <h1 id="titulo" class="titulo">—</h1>
@@ -69,6 +70,7 @@
         <button id="btnDj" class="btn-dj"><span class="dj-dot"></span><span id="btnDjTxt"></span></button>
         <label class="volumen"><span aria-hidden="true">🔈</span><input id="rangoVol" type="range" min="0" max="100" value="100" data-i18n-aria="volumen" /></label>
       </div>
+      <button id="btnVideo" class="btn-enlace"></button>
       <p id="notaMovil" class="nota" hidden data-i18n="notaMovil"></p>
     </section>
 
@@ -102,6 +104,8 @@
         <label class="check"><input type="checkbox" id="chkUbicacion" /> <span data-i18n="usarUbicacion"></span></label>
         <button id="btnCrear" class="btn-primario" data-i18n="crear"></button>
         <p id="estadoCrear" class="estado" aria-live="polite"></p>
+        <button id="btnProbarVoz" class="btn-secundario" data-i18n="probarVoz"></button>
+        <p id="estadoVoz" class="estado" aria-live="polite"></p>
       </div>
 
       <!-- Cola -->
@@ -121,6 +125,8 @@
     </section>
   </main>
 
+  <audio id="djAudio" preload="auto"></audio>
+  <audio id="pruebaAudio" preload="auto"></audio>
   <script src="/app.js" type="module"></script>
 </body>
 </html>

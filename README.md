@@ -10,17 +10,18 @@ habla de la música, el clima o la hora.
 | | Velvet Dial (Spotify) | Velvet Tube (YouTube) |
 |---|---|---|
 | Inicio de sesión | Cuenta de Spotify (Premium) | **Ninguno** (solo un código de acceso opcional) |
-| Quién reproduce | Spotify, controlado desde el servidor | El navegador, con el reproductor incrustado de YouTube |
+| Quién reproduce | Spotify, controlado desde el servidor | El navegador, con el reproductor incrustado de YouTube (oculto por defecto) |
 | Bajar la música cuando habla el DJ | Peticiones a la API de Spotify | `setVolume` local: instantáneo y sin red |
 | Listas | Playlist real en tu Spotify | Se guardan en el navegador (con los vídeos ya encontrados) |
 | Servidor | Guarda la sesión en una cookie | **Sin estado**: solo Gemini, ElevenLabs y búsqueda |
 
 ## Lo que tienes que saber antes de usarla
 
-1. **El vídeo se ve.** No hay modo "solo audio" oculto: el reproductor de YouTube hace de portada (≈ 360×220). Las condiciones
-   de la API de YouTube prohíben ocultar el reproductor o separar el audio del vídeo, y las alternativas (extraer el audio con
-   herramientas tipo yt-dlp) las incumplen y se rompen cada pocas semanas. Si quieres, ese cuadro se puede hacer más pequeño
-   (mínimo 200×200), pero no esconderlo.
+1. **El vídeo está oculto por defecto, pero sigue cargándose.** La app solo muestra la miniatura de la canción y suena el audio; un botón
+   ("Mostrar vídeo") enseña el reproductor de YouTube. Técnicamente el vídeo se reproduce por debajo, tapado: no se extrae el audio.
+   Ojo: las condiciones de la API de YouTube piden que el reproductor sea visible, así que esto las incumple. Para un uso personal
+   el riesgo práctico es bajo, pero es de tu proyecto de Google: si algún día prefieres cumplirlas, deja el vídeo visible. Si un navegador
+   bloquea el inicio, la app muestra el vídeo sola para que puedas tocarlo.
 2. **Cuota de la API de YouTube.** Cada canción nueva que se busca cuesta 101 unidades de las 10.000 diarias gratuitas:
    **≈ 99 canciones nuevas al día** (unas 5 listas de 20). Para gastar lo mínimo:
    - solo se buscan las 3 próximas canciones, no la lista entera (si cierras a mitad, el resto no gasta nada);
@@ -70,6 +71,13 @@ Nunca subas el `.env` al repositorio.
 Cada `git push` a `main` redespliega solo. Render gratis duerme el servicio tras un rato sin uso (tarda ~50 s en despertar) y borra el disco
 al reiniciar, así que la caché de búsquedas en archivo (`CACHE_FILE`) se pierde; las listas guardadas no, porque viven en el navegador de cada dispositivo
 (no se comparten entre dispositivos).
+
+## Si el DJ no se oye
+
+En la pestaña *Crear* hay un botón **Probar la voz del DJ**: genera una locución de prueba y la reproduce al instante. Si falla, muestra qué servicio
+falló y el código (p. ej. `ElevenLabs (401)` = clave inválida, `(402)` = esa voz requiere plan de pago, `(429)` = límite). El detalle completo está en
+los *Logs* de Render. Si la prueba suena pero el DJ no habla entre canciones, mira la etiqueta bajo la portada: dice si está preparando, listo o si falló.
+En iPhone, comprueba que no esté activado el modo silencio.
 
 ## Cómo funciona el DJ entre canciones
 

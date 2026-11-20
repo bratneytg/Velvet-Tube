@@ -51,6 +51,10 @@ with sync_playwright() as p:
     script = pg.inner_text('#djScript')
     print(f'4. DJ al aire a los {t_aire:.1f}s | guion: {script}')
     assert 'Song 0 de Artist 0' in script and 'Song 1 de Artist 1' in script, script
+    time.sleep(0.8)
+    audio = pg.evaluate("(() => { const a = document.getElementById('djAudio'); return {paused: a.paused, t: a.currentTime, dur: a.duration, vol: a.volume}; })()")
+    print('   <audio> del DJ:', audio)
+    assert not audio['paused'] and audio['t'] > 0.3 and audio['vol'] == 1, 'la voz del DJ no está sonando'
     pg.wait_for_function("window.__log.some(e => e[0]==='ended')", timeout=20000)
     vols = [e for e in log() if e[0]=='vol']
     print('   volumen (ms, valor):', [(v[2], v[1]) for v in vols][:6], '...')

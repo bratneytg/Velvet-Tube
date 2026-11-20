@@ -16,7 +16,6 @@ const SUBIDA_ANTES_S = 1.6;   // la música vuelve a subir bajo las últimas pal
 const ANTICIPACION_S = 1.2;   // la voz termina ~1,2 s antes de que acabe la canción, para que la siguiente entre limpia
 const RETRASO_VOZ_S = 0.35;   // la música empieza a bajar este tiempo antes de que entre la voz
 const MIN_SOLAPE_S = 2.5;     // si a la locución le quedan menos segundos de canción que esto, se emite en el hueco
-const GANANCIA_VOZ = 1.4;
 const ESPERA_DJ_MAX_MS = 12000;
 
 // ---------------------------------------------------------------------------
@@ -34,6 +33,11 @@ const TXT = {
     guardar: 'Guardar lista', guardada: 'Guardada ✓', sinGuardadas: 'Todavía no has guardado listas.',
     notaGuardadas: 'Las listas se guardan en este navegador, con los vídeos ya encontrados: volver a ponerlas no gasta cuota de YouTube.',
     reproducir: 'Reproducir', borrar: 'Borrar', canciones: 'canciones',
+    mostrarVideo: 'Mostrar vídeo', ocultarVideo: 'Ocultar vídeo',
+    probarVoz: '🔊 Probar la voz del DJ', probando: 'Generando una locución de prueba…', pruebaFallo: 'La prueba falló:',
+    pruebaBloqueada: 'El navegador bloqueó el sonido. Toca la pantalla y vuelve a probar.',
+    pruebaSuena: 'Suena: «{g}». Si no la oyes, sube el volumen del dispositivo (en iPhone, quita el modo silencio).',
+    errDj: 'El DJ no pudo preparar su intervención: {m}. Mira los logs de Render para ver el detalle.',
     djOn: 'DJ activado', djOff: 'DJ desactivado', djNoDisponible: 'DJ no disponible',
     anterior: 'Anterior', siguiente: 'Siguiente', reproducirPausa: 'Reproducir / pausa', volumen: 'Volumen',
     tocarContinuar: '▶ Toca para continuar',
@@ -58,6 +62,11 @@ const TXT = {
     guardar: 'Save list', guardada: 'Saved ✓', sinGuardadas: 'You have not saved any lists yet.',
     notaGuardadas: 'Lists are saved in this browser together with the videos already found, so replaying them costs no YouTube quota.',
     reproducir: 'Play', borrar: 'Delete', canciones: 'songs',
+    mostrarVideo: 'Show video', ocultarVideo: 'Hide video',
+    probarVoz: '🔊 Test the DJ voice', probando: 'Generating a test link…', pruebaFallo: 'The test failed:',
+    pruebaBloqueada: 'The browser blocked the sound. Tap the screen and try again.',
+    pruebaSuena: 'Playing: "{g}". If you cannot hear it, raise the device volume (on iPhone, turn off silent mode).',
+    errDj: 'The DJ could not prepare the link: {m}. Check the Render logs for details.',
     djOn: 'DJ on', djOff: 'DJ off', djNoDisponible: 'DJ unavailable',
     anterior: 'Previous', siguiente: 'Next', reproducirPausa: 'Play / pause', volumen: 'Volume',
     tocarContinuar: '▶ Tap to continue',
@@ -81,7 +90,7 @@ function aplicarIdioma() {
   document.querySelectorAll('[data-i18n-placeholder]').forEach(e => { e.placeholder = t(e.dataset.i18nPlaceholder); });
   document.querySelectorAll('[data-i18n-aria]').forEach(e => { e.setAttribute('aria-label', t(e.dataset.i18nAria)); });
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('activo', b.dataset.lang === idioma));
-  pintarBtnDj(); pintarCola(); pintarGuardadas(); pintarActual(); setBadge(badgeActual, badgeVars);
+  pintarBtnDj(); pintarCola(); pintarGuardadas(); pintarActual(); pintarVideo(); setBadge(badgeActual, badgeVars);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +98,7 @@ function aplicarIdioma() {
 // ---------------------------------------------------------------------------
 const leerJson = (clave, def) => { try { return JSON.parse(localStorage.getItem(clave)) ?? def; } catch { return def; } };
 const guardarJson = (clave, valor) => { try { localStorage.setItem(clave, JSON.stringify(valor)); } catch { /* sin espacio o modo privado */ } };
-const AJ = Object.assign({ idioma: (navigator.language || 'es').toLowerCase().startsWith('es') ? 'es' : 'en', voz: null, freq: 1, cantidad: 20, dj: true, ambiente: '', ubicacion: false, codigo: '' }, leerJson('vt_ajustes', {}));
+const AJ = Object.assign({ idioma: (navigator.language || 'es').toLowerCase().startsWith('es') ? 'es' : 'en', voz: null, freq: 1, cantidad: 20, dj: true, ambiente: '', ubicacion: false, video: false, codigo: '' }, leerJson('vt_ajustes', {}));
 const guardarAjustes = () => guardarJson('vt_ajustes', AJ);
 const idSesion = (() => { let s = localStorage.getItem('vt_sesion'); if (!s) { s = crypto.randomUUID().replace(/-/g, '').slice(0, 20); try { localStorage.setItem('vt_sesion', s); } catch { /* ok */ } } return s; })();
 
@@ -107,12 +116,13 @@ const S = {
   djActivo: true,
   freq: 1,
   vol: 100,
-  hablando: false, esperandoVoz: false, fuente: null, timersVoz: [],
+  hablando: false, esperandoVoz: false, timersVoz: [], revelado: false, avisoDj: false,
   dj: nuevoDj(),
   errYt: null,       // último error grave de YouTube (cuota, clave...)
   fade: null,
 };
-function nuevoDj() { return { estado: 'idle', buffer: null, dur: 0, guion: '', fallos: 0 }; }
+function nuevoDj() { return { estado: 'idle', url: null, dur: 0, guion: '', fallos: 0 }; }
+function soltarDj() { if (S.dj.url) { try { URL.revokeObjectURL(S.dj.url); } catch { /* ok */ } S.dj.url = null; } }
 const CONF = { requiereCodigo: false, youtube: true, gemini: true, voz: true };
 
 // ---------------------------------------------------------------------------
@@ -145,7 +155,7 @@ async function api(ruta, cuerpo, { timeout = 60000 } = {}) {
   });
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && d.codigo === 'CODIGO') { pedirCodigo(true); throw Object.assign(new Error(d.error || 'Código incorrecto'), { codigo: 'CODIGO' }); }
-  if (!r.ok || d.success === false) throw Object.assign(new Error(d.error || `HTTP ${r.status}`), { codigo: d.codigo, status: r.status });
+  if (!r.ok || d.success === false) throw Object.assign(new Error(d.error || `HTTP ${r.status}`), { codigo: d.codigo, status: r.status, detalle: d.detalle });
   return d;
 }
 
@@ -192,13 +202,18 @@ function cargarVideo(id) {
   });
   // Si el navegador bloquea el inicio automático (típico en iPhone), se ofrece un toque para continuar
   clearTimeout(S.tEspera);
-  S.tEspera = setTimeout(() => { if (tok === S.token && S.estadoYt !== YT_PLAYING && S.estadoYt !== YT_BUFFERING) $('btnTocar').hidden = false; }, 4500);
+  S.tEspera = setTimeout(() => {
+    if (tok !== S.token || S.estadoYt === YT_PLAYING || S.estadoYt === YT_BUFFERING) return;
+    $('btnTocar').hidden = false;
+    S.revelado = true; pintarVideo(); // en iPhone a veces hay que tocar el propio reproductor: se deja a la vista
+  }, 4500);
 }
 
 function alCambiarEstado(e) {
   S.estadoYt = e.data;
   if (e.data === YT_PLAYING) {
     $('btnTocar').hidden = true; clearTimeout(S.tEspera);
+    if (S.revelado) { S.revelado = false; pintarVideo(); }
     pintarPlay(true); mantenerPantalla(true);
     if (S.tokenIniciado !== S.token) { S.tokenIniciado = S.token; alEmpezarCancion(); }
   } else if (e.data === YT_PAUSED) { pintarPlay(false); }
@@ -209,7 +224,7 @@ function alCambiarEstado(e) {
 function alErrorYoutube() {
   const c = S.cola[S.idx];
   if (!c) return;
-  if (c.cand && c.ci + 1 < c.cand.length) { c.ci++; setBadge('bProbando'); cargarVideo(c.cand[c.ci].id); return; }
+  if (c.cand && c.ci + 1 < c.cand.length) { c.ci++; pintarMiniatura(); setBadge('bProbando'); cargarVideo(c.cand[c.ci].id); return; }
   c.estado = 'err'; pintarCola();
   aviso(t('noReproducible', { t: c.titulo }), { error: true });
   detenerVoz();
@@ -257,7 +272,7 @@ async function reproducir(i) {
   if (i < 0) i = 0;
   if (i >= S.cola.length) { S.token++; S.proximo = null; setBadge('bFinLista'); pintarPlay(false); try { player?.stopVideo(); } catch { /* ok */ } return; }
   const tok = ++S.token;
-  S.idx = i; S.proximo = null; S.dj = nuevoDj(); S.estadoYt = -1; S.esperandoVoz = false;
+  S.idx = i; S.proximo = null; soltarDj(); S.dj = nuevoDj(); S.estadoYt = -1; S.esperandoVoz = false;
   $('btnTocar').hidden = true;
   const c = S.cola[i];
   pintarCola(); pintarActual(); setBadge('bBuscando');
@@ -308,12 +323,45 @@ function irSiguiente() { reproducir(S.proximo ?? S.idx + 1); }
 // ---------------------------------------------------------------------------
 const djDebeHablar = () => S.djActivo && CONF.voz && CONF.gemini && S.proximo !== null && S.proximo < S.cola.length && ((S.idx + 1) % S.freq === 0);
 
-let audioCtx = null;
+// La voz del DJ suena por un elemento <audio> (no por Web Audio): los navegadores móviles lo toleran mucho mejor junto al
+// reproductor de YouTube. Hay que "desbloquearlo" con un toque del usuario; se intenta en cada toque hasta que lo consigue.
+const djAudio = $('djAudio'), pruebaAudio = $('pruebaAudio');
+let audioDesbloqueado = false;
+function wavSilencio() { // 0,1 s de silencio, solo para desbloquear los elementos de audio
+  const n = 800, b = new Uint8Array(44 + n), dv = new DataView(b.buffer);
+  const w = (o, txt) => [...txt].forEach((c, i) => dv.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, 8000, true); dv.setUint32(28, 8000, true); dv.setUint16(32, 1, true); dv.setUint16(34, 8, true); w(36, 'data'); dv.setUint32(40, n, true);
+  b.fill(128, 44);
+  return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+}
 function asegurarAudio() {
   try { if (ES_IOS && 'audioSession' in navigator) navigator.audioSession.type = 'playback'; } catch { /* opcional */ }
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
+  if (audioDesbloqueado) return;
+  audioDesbloqueado = true;
+  const silencio = wavSilencio();
+  const abrir = (el) => {
+    el.src = silencio; el.muted = true;
+    el.play().then(() => { el.pause(); el.muted = false; }).catch(() => { el.muted = false; audioDesbloqueado = false; });
+  };
+  abrir(pruebaAudio);
+  if (!['listo', 'hablando'].includes(S.dj.estado)) abrir(djAudio); // no pisar una locución ya preparada
 }
+['pointerdown', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, () => asegurarAudio(), { passive: true }));
+
+/** Carga un audio en un elemento y devuelve su duración en segundos. */
+function cargarEnElemento(el, url, bytes) {
+  return new Promise((ok, ko) => {
+    const limite = setTimeout(() => ko(new Error('el audio tardó demasiado en cargar')), 10000);
+    el.onloadedmetadata = () => { clearTimeout(limite); const d = el.duration; ok(Number.isFinite(d) && d > 0 ? d : (bytes * 8) / 128000); };
+    el.onerror = () => { clearTimeout(limite); ko(new Error('el navegador no pudo leer el audio del DJ')); };
+    el.src = url; el.load();
+  });
+}
+const urlDeBase64 = (b64) => {
+  const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+  return { url: URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' })), bytes: bytes.length };
+};
 
 function ubicacion() {
   return AJ.ubicacion && S.ubic ? S.ubic : null;
@@ -332,17 +380,18 @@ async function prepararDj(tok) {
     }, { timeout: 60000 });
     if (tok !== S.token) return;
     asegurarAudio();
-    const bytes = Uint8Array.from(atob(res.audioBase64), ch => ch.charCodeAt(0));
-    const buffer = await audioCtx.decodeAudioData(bytes.buffer);
-    if (tok !== S.token) return;
-    if (!S.djActivo) { dj.estado = 'idle'; return; } // lo apagaron mientras se preparaba
-    Object.assign(dj, { estado: 'listo', buffer, dur: buffer.duration, guion: res.guion });
-    setBadge('bListo', { s: Math.round(buffer.duration) });
+    const { url, bytes } = urlDeBase64(res.audioBase64);
+    let dur;
+    try { dur = await cargarEnElemento(djAudio, url, bytes); } catch (err) { URL.revokeObjectURL(url); throw err; }
+    if (tok !== S.token || !S.djActivo) { URL.revokeObjectURL(url); if (tok === S.token) dj.estado = 'idle'; return; } // cambió la canción, o apagaron el DJ mientras se preparaba
+    Object.assign(dj, { estado: 'listo', url, dur, guion: res.guion });
+    setBadge('bListo', { s: Math.round(dur) });
   } catch (e) {
     if (tok !== S.token) return;
     dj.estado = 'error'; dj.fallos++;
     console.warn('[DJ] preparación fallida:', e.message);
     setBadge('bErrGenerar');
+    if (!S.avisoDj) { S.avisoDj = true; aviso(t('errDj', { m: `${e.detalle ? e.detalle + ' · ' : ''}${e.message}` }), { error: true, fijo: true }); }
     if (e.codigo === 'SIN_VOZ') { CONF.voz = false; pintarBtnDj(); return; }
     if (dj.fallos < 2 && e.codigo !== 'LIMITE') setTimeout(() => { if (tok === S.token && dj.estado === 'error') { dj.estado = 'idle'; prepararDj(tok); } }, 8000);
   }
@@ -365,27 +414,25 @@ function fundir(desde, hasta, ms) {
 
 async function iniciarVoz({ solape }) {
   const dj = S.dj, tok = S.token;
-  if (S.hablando || !dj.buffer || dj.estado !== 'listo') return false;
+  if (S.hablando || !dj.url || dj.estado !== 'listo') return false;
   S.hablando = true; dj.estado = 'hablando';
-  if (audioCtx?.state !== 'running') await audioCtx?.resume().catch(() => {});
-  if (audioCtx?.state !== 'running') { // el navegador aún no permite audio: se descarta esta locución sin tocar la música
-    S.hablando = false; dj.estado = 'descartada'; setBadge('bPulsaDj'); return false;
-  }
   setBadge('bAlAire');
   $('djScript').textContent = `"${dj.guion}"`;
-  if (solape) fundir(S.vol, S.vol * DUCK, BAJADA_MS);
-  if (solape) await esperar(RETRASO_VOZ_S * 1000);
+  if (solape) { fundir(S.vol, S.vol * DUCK, BAJADA_MS); await esperar(RETRASO_VOZ_S * 1000); }
   if (tok !== S.token || !S.hablando) return false;
 
-  const fuente = audioCtx.createBufferSource();
-  fuente.buffer = dj.buffer;
-  const ganancia = audioCtx.createGain(); ganancia.gain.value = GANANCIA_VOZ;
-  const limitador = audioCtx.createDynamicsCompressor(); // amplifica sin saturar
-  limitador.threshold.value = -6; limitador.knee.value = 3; limitador.ratio.value = 20; limitador.attack.value = 0.003; limitador.release.value = 0.1;
-  fuente.connect(ganancia).connect(limitador).connect(audioCtx.destination);
-  fuente.onended = () => finVoz(tok);
-  S.fuente = fuente;
-  fuente.start();
+  djAudio.onended = () => finVoz(tok);
+  djAudio.currentTime = 0; djAudio.volume = 1;
+  try { await djAudio.play(); }
+  catch (e) { // el navegador no deja sonar sin un toque del usuario: se descarta esta locución y la música sigue
+    console.warn('[DJ] reproducción bloqueada:', e.message);
+    if (tok !== S.token) return false;
+    S.hablando = false; dj.estado = 'descartada'; clearInterval(S.fade);
+    try { player?.setVolume(S.vol); } catch { /* ok */ }
+    setBadge('bPulsaDj');
+    return false;
+  }
+  if (tok !== S.token) { djAudio.pause(); return false; }
   if (solape) S.timersVoz.push(setTimeout(() => { if (tok === S.token) fundir(S.vol * DUCK, S.vol, SUBIDA_MS); }, Math.max(0, (dj.dur - SUBIDA_ANTES_S) * 1000)));
   S.timersVoz.push(setTimeout(() => finVoz(tok), dj.dur * 1000 + 4000)); // red de seguridad por si 'ended' no llega
   return true;
@@ -395,7 +442,7 @@ function finVoz(tok) {
   if (tok !== S.token || !S.hablando) return;
   S.hablando = false; S.dj.estado = 'hecha';
   S.timersVoz.forEach(clearTimeout); S.timersVoz = [];
-  S.fuente = null;
+  djAudio.onended = null;
   clearInterval(S.fade);
   try { player?.setVolume(S.vol); } catch { /* ok */ }
   setBadge('bSiguiente');
@@ -406,7 +453,7 @@ function finVoz(tok) {
 function detenerVoz() {
   S.timersVoz.forEach(clearTimeout); S.timersVoz = [];
   clearInterval(S.fade);
-  if (S.fuente) { S.fuente.onended = null; try { S.fuente.stop(); } catch { /* ya terminó */ } S.fuente = null; }
+  djAudio.onended = null; try { djAudio.pause(); } catch { /* ok */ }
   S.hablando = false; S.esperandoVoz = false;
   try { player?.setVolume(S.vol); } catch { /* ok */ }
 }
@@ -465,16 +512,21 @@ function pintarPlay(sonando) { $('iconoPlay').innerHTML = sonando ? ICONO_PAUSA 
 function alternarPlay() {
   asegurarAudio();
   if (!playerListo || S.idx < 0) return;
-  if (S.hablando && audioCtx) { // en pleno DJ: se pausan la voz y la canción juntas
-    if (audioCtx.state === 'running') { audioCtx.suspend(); player.pauseVideo(); pintarPlay(false); }
-    else { audioCtx.resume(); player.playVideo(); pintarPlay(true); }
+  if (S.hablando) { // en pleno DJ: se pausan la voz y la canción juntas (si la canción ya terminó, solo la voz)
+    if (!djAudio.paused) { djAudio.pause(); if (S.estadoYt !== YT_ENDED) player.pauseVideo(); pintarPlay(false); }
+    else { djAudio.play().catch(() => {}); if (S.estadoYt !== YT_ENDED) player.playVideo(); pintarPlay(true); }
     return;
   }
   const st = player.getPlayerState();
   if (st === YT_PLAYING || st === YT_BUFFERING) player.pauseVideo(); else player.playVideo();
 }
 $('btnPlay').onclick = alternarPlay;
-$('btnTocar').onclick = () => { asegurarAudio(); $('btnTocar').hidden = true; try { player.playVideo(); } catch { /* ok */ } };
+$('btnTocar').onclick = () => {
+  asegurarAudio(); $('btnTocar').hidden = true;
+  try { player.playVideo(); } catch { /* ok */ }
+  // si el navegador sigue sin arrancar, se quita el botón para poder tocar el propio reproductor (ya visible)
+  setTimeout(() => { if (S.estadoYt !== YT_PLAYING && S.estadoYt !== YT_BUFFERING) { S.revelado = true; pintarVideo(); } }, 1500);
+};
 $('btnNext').onclick = () => { asegurarAudio(); if (S.cola.length) reproducir(S.idx + 1); };
 $('btnPrev').onclick = () => { asegurarAudio(); if (ultimaPos > 4) { try { player.seekTo(0, true); } catch { /* ok */ } } else if (S.cola.length) reproducir(S.idx - 1); };
 $('rangoVol').oninput = (e) => { S.vol = Number(e.target.value); if (!S.hablando) { try { player?.setVolume(S.vol); } catch { /* ok */ } } };
@@ -492,7 +544,7 @@ $('btnDj').onclick = () => {
   pintarBtnDj();
   // Si se activa a mitad de canción, se prepara la locución para el siguiente cambio
   if (S.djActivo && S.idx >= 0 && S.dj.estado === 'idle' && djDebeHablar()) prepararDj(S.token);
-  if (!S.djActivo && !S.hablando && S.dj.estado !== 'hablando') { S.dj.estado = 'idle'; S.dj.buffer = null; setBadge('bReposo'); }
+  if (!S.djActivo && !S.hablando && S.dj.estado !== 'hablando') { soltarDj(); S.dj.estado = 'idle'; setBadge('bReposo'); }
 };
 
 // ---------------------------------------------------------------------------
@@ -526,8 +578,21 @@ function actualizarMediaSession(c) {
 // ---------------------------------------------------------------------------
 // Pintar interfaz
 // ---------------------------------------------------------------------------
+function pintarVideo() {
+  $('portada').classList.toggle('oculta', !AJ.video && !S.revelado);
+  $('btnVideo').textContent = t(AJ.video ? 'ocultarVideo' : 'mostrarVideo');
+}
+$('btnVideo').onclick = () => { AJ.video = !AJ.video; S.revelado = false; guardarAjustes(); pintarVideo(); };
+
+function pintarMiniatura() {
+  const c = S.cola[S.idx], id = c?.cand?.[c.ci]?.id, m = $('miniatura');
+  m.style.backgroundImage = id ? `url(https://i.ytimg.com/vi/${id}/hqdefault.jpg)` : 'url(/logo.png)';
+  m.style.backgroundSize = id ? 'cover' : 'contain';
+}
+
 function pintarActual() {
   const c = S.cola[S.idx];
+  pintarMiniatura();
   $('titulo').textContent = c ? c.titulo : '—';
   $('artista').textContent = c ? c.artista : t('sinLista');
 }
@@ -599,7 +664,7 @@ function pintarGuardadas() {
 }
 
 function cargarLista({ id, nombre, descripcion, canciones }) {
-  S.errYt = null;
+  S.errYt = null; S.avisoDj = false;
   S.id = id; S.nombre = nombre; S.descripcion = descripcion;
   S.cola = canciones.map(c => ({ titulo: c.titulo, artista: c.artista, cand: Array.isArray(c.cand) ? c.cand : null, ci: 0, estado: 'pend', fallos: 0 }));
   S.idx = -1; $('djScript').textContent = '';
@@ -629,6 +694,31 @@ async function crearLista() {
 }
 $('btnCrear').onclick = crearLista;
 
+// Prueba aislada de la voz del DJ (Gemini + ElevenLabs + audio del navegador) sin esperar a una transición
+async function probarVoz() {
+  const btn = $('btnProbarVoz'), est = $('estadoVoz');
+  est.classList.remove('error');
+  if (!CONF.voz || !CONF.gemini) { est.textContent = t('avisoSinVoz'); est.classList.add('error'); return; }
+  asegurarAudio();
+  btn.disabled = true; est.textContent = t('probando');
+  try {
+    const res = await api('/api/locucion', {
+      anterior: { titulo: 'Bohemian Rhapsody', artista: 'Queen' }, siguiente: { titulo: 'Hotel California', artista: 'Eagles' },
+      ambiente: AJ.ambiente, ubicacion: ubicacion(), voz: AJ.voz, sesion: idSesion,
+    }, { timeout: 60000 });
+    const { url, bytes } = urlDeBase64(res.audioBase64);
+    await cargarEnElemento(pruebaAudio, url, bytes);
+    pruebaAudio.onended = () => URL.revokeObjectURL(url);
+    pruebaAudio.currentTime = 0; pruebaAudio.volume = 1;
+    await pruebaAudio.play();
+    est.textContent = t('pruebaSuena', { g: res.guion });
+  } catch (e) {
+    est.textContent = e.name === 'NotAllowedError' ? t('pruebaBloqueada') : `${t('pruebaFallo')} ${e.detalle ? e.detalle + ' · ' : ''}${e.message}`;
+    est.classList.add('error');
+  } finally { btn.disabled = false; }
+}
+$('btnProbarVoz').onclick = probarVoz;
+
 // ---------------------------------------------------------------------------
 // Pestañas, idioma y ajustes
 // ---------------------------------------------------------------------------
@@ -653,7 +743,7 @@ $('chkUbicacion').onchange = (e) => { AJ.ubicacion = e.target.checked; guardarAj
 // Si cambia la voz o el pedido, la locución ya preparada ya no vale: se vuelve a generar
 function descartarLocucionPreparada() {
   if (S.hablando || S.idx < 0) return;
-  if (['listo', 'error', 'descartada'].includes(S.dj.estado)) { S.dj.estado = 'idle'; S.dj.buffer = null; if (djDebeHablar()) prepararDj(S.token); }
+  if (['listo', 'error', 'descartada'].includes(S.dj.estado)) { soltarDj(); S.dj.estado = 'idle'; if (djDebeHablar()) prepararDj(S.token); }
 }
 function pedirUbicacion() {
   if (!navigator.geolocation) return;

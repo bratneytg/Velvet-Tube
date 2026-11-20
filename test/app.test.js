@@ -115,6 +115,24 @@ test('/api/locucion: una voz desconocida cae a la de por defecto y faltan cancio
   assert.equal((await post('/api/locucion', { anterior: { titulo: 'Uno' } })).status, 400);
 });
 
+test('/api/locucion: si falla ElevenLabs o Gemini, dice cuál (con el código HTTP) sin filtrar el mensaje técnico', async () => {
+  const montar = async (vozFalla, geminiFalla) => {
+    const app = crearApp({
+      gemini: { ...gemini, generarGuionLocutor: async () => { if (geminiFalla) throw Object.assign(new Error('clave api-secreta-123 inválida'), { status: 400 }); return 'hola'; } },
+      voz: { elegirVoz, generarAudioLocucion: async () => { if (vozFalla) throw new Error('Error en ElevenLabs (401): {"detail":"clave xi-secreta"}'); return new ArrayBuffer(1); } },
+      obtenerClima: async () => null, buscador, env: { GEMINI_API_KEY: 'g', ELEVENLABS_API_KEY: 'e' },
+    });
+    const sv = app.listen(0, '127.0.0.1'); await new Promise(r => sv.once('listening', r));
+    const r = await fetch(`http://127.0.0.1:${sv.address().port}/api/locucion`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anterior: { titulo: 'a', artista: 'b' }, siguiente: { titulo: 'c', artista: 'd' } }) });
+    const texto = await r.text(); sv.closeAllConnections?.(); sv.close();
+    return { status: r.status, d: JSON.parse(texto), texto };
+  };
+  const a = await montar(true, false);
+  assert.equal(a.status, 500); assert.equal(a.d.detalle, 'ElevenLabs (401)'); assert.ok(!a.texto.includes('xi-secreta'));
+  const b = await montar(false, true);
+  assert.equal(b.d.detalle, 'Gemini (400)'); assert.ok(!b.texto.includes('api-secreta'));
+});
+
 test('rutas /api desconocidas responden JSON 404', async () => {
   const r = await fetch(base + '/api/nada', { headers: { 'x-codigo': 'secreto' } });
   assert.equal(r.status, 404);

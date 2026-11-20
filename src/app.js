@@ -145,6 +145,7 @@ export function crearApp({ gemini, voz, obtenerClima, buscador, env = process.en
     const anterior = limpiarCancion(req.body?.anterior);
     const siguiente = limpiarCancion(req.body?.siguiente);
     if (!anterior.titulo || !siguiente.titulo) return res.status(400).json({ success: false, error: 'Faltan las canciones' });
+    let etapa = 'Gemini'; // para decirle a la web qué servicio falló (sin revelar el mensaje técnico)
     try {
       const ambiente = String(req.body?.ambiente ?? '').trim().slice(0, 300);
       const clima = await obtenerClima(req.body?.ubicacion ?? null); // nunca lanza error: devuelve null; sin ubicación usa la ciudad por defecto
@@ -156,11 +157,14 @@ export function crearApp({ gemini, voz, obtenerClima, buscador, env = process.en
       const v = voz.elegirVoz(req.body?.voz); // idioma + género + id de la voz de ElevenLabs
       const guion = await gemini.generarGuionLocutor(gemini.nombreCancion(anterior), gemini.nombreCancion(siguiente), { tipo, clima, ambiente, idioma: v.idioma, genero: v.genero, sesion });
       console.log(`🎙️ Locución [${tipo}]${ambiente ? ` + ambiente "${ambiente}"` : ''}: ${guion}`);
+      etapa = 'ElevenLabs';
       const audio = await voz.generarAudioLocucion(guion, v.id);
       res.json({ success: true, guion, tipo, audioBase64: Buffer.from(audio).toString('base64') });
     } catch (e) {
-      console.error('❌ Error en /api/locucion:', e.message); // el detalle técnico queda en los logs, no se envía al navegador
-      res.status(esTimeout(e) ? 504 : 500).json({ success: false, error: esTimeout(e) ? 'Un servicio tardó demasiado, reintenta' : 'No se pudo generar la locución' });
+      console.error(`❌ Error en /api/locucion (${etapa}):`, e.message); // el detalle técnico queda en los logs, no se envía al navegador
+      const estado = /\((\d{3})\)/.exec(e.message)?.[1] ?? e.status ?? e.code; // p. ej. 401 clave inválida, 402 plan de pago, 429 límite
+      const detalle = etapa + (Number.isInteger(Number(estado)) && Number(estado) >= 100 ? ` (${estado})` : '');
+      res.status(esTimeout(e) ? 504 : 500).json({ success: false, detalle, error: esTimeout(e) ? 'Un servicio tardó demasiado, reintenta' : 'No se pudo generar la locución' });
     }
   });
 

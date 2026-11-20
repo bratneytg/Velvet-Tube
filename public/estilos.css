@@ -40,7 +40,9 @@ button, select { touch-action: manipulation; }
 /* ---------- Portada = vídeo de YouTube (mínimo 220 px de alto; YouTube exige al menos 200x200) ---------- */
 .portada { position: relative; width: 100%; max-width: 440px; height: clamp(220px, 56vw, 248px); background: #000 url('/logo.png') center / contain no-repeat; border-radius: 10px; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,.6); margin-bottom: 14px; }
 .portada iframe, .portada #ytPlayer { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.tocar { position: absolute; inset: 0; z-index: 2; background: rgba(0,0,0,.72); color: #fff; border: 0; font-size: 16px; font-weight: 700; cursor: pointer; }
+.miniatura { display: none; position: absolute; inset: 0; z-index: 1; background: #000 center / cover no-repeat; pointer-events: none; }
+.portada.oculta .miniatura { display: block; }
+.tocar { position: absolute; inset: 0; z-index: 3; background: rgba(0,0,0,.72); color: #fff; border: 0; font-size: 16px; font-weight: 700; cursor: pointer; }
 .titulo { font-size: 22px; font-weight: 700; line-height: 1.2; max-width: 100%; overflow-wrap: anywhere; }
 .artista { font-size: 15px; color: var(--texto2); margin-bottom: 10px; }
 
@@ -88,6 +90,10 @@ button, select { touch-action: manipulation; }
 .btn-primario { background: var(--neon); color: #000; border: 0; font-weight: 700; padding: 12px; border-radius: 500px; font-size: 14px; cursor: pointer; transition: transform .15s; }
 .btn-primario:hover { transform: scale(1.03); }
 .btn-primario:disabled { opacity: .55; cursor: wait; transform: none; }
+.btn-secundario { background: transparent; color: #fff; border: 1px solid var(--borde); border-radius: 500px; padding: 10px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.btn-secundario:hover { border-color: #6a6a6a; }
+.btn-secundario:disabled { opacity: .55; cursor: wait; }
+#btnVideo { margin-top: 10px; }
 .btn-enlace { background: none; border: 0; padding: 0; font-size: 12px; font-weight: 700; color: var(--neon); cursor: pointer; }
 .btn-enlace:hover { text-decoration: underline; }
 .estado { font-size: 13px; color: var(--texto2); line-height: 1.4; min-height: 18px; }

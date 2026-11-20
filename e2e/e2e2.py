@@ -100,7 +100,33 @@ with sync_playwright() as p:
     n1 = len(json.load(urllib.request.urlopen('http://127.0.0.1:3122/__registro'))['resolver'])
     ok('F1. reproducir una lista guardada no repite búsquedas de las canciones ya resueltas', n1 - n0 <= 2, f'búsquedas nuevas: {n1-n0}')
     pg.context.close()
-    b.close(); s2.terminate()
+    # --- G. Vídeo oculto por defecto, con opción para mostrarlo ---
+    s3 = servidor(3123)   # servidor nuevo: el anterior ya agotó su límite de 5 listas cada 10 min
+    pg = nueva(b, 3123)
+    crear(pg); pg.wait_for_function("window.__log && window.__log.some(e => e[0]==='load')", timeout=15000); time.sleep(0.5)
+    ok('G1. por defecto el vídeo está tapado por la miniatura', 'oculta' in pg.get_attribute('#portada', 'class') and pg.is_visible('#miniatura'))
+    ok('G2. la miniatura es la de la canción actual', 'id_Song_0' in pg.evaluate("document.getElementById('miniatura').style.backgroundImage"))
+    ok('G3. el reproductor sigue sonando por debajo', pg.evaluate('window.__yt.state') == 1)
+    ok('G4. el botón ofrece mostrarlo', 'Mostrar' in pg.inner_text('#btnVideo'))
+    pg.click('#btnVideo'); time.sleep(0.2)
+    ok('G5. al pulsar se ve el vídeo', 'oculta' not in pg.get_attribute('#portada', 'class') and not pg.is_visible('#miniatura'))
+    pg.reload(); pg.wait_for_selector('#btnCrear'); time.sleep(0.5)
+    ok('G6. la elección se recuerda al recargar', 'oculta' not in pg.get_attribute('#portada', 'class') and 'Ocultar' in pg.inner_text('#btnVideo'))
+    pg.context.close()
+
+    # --- H. Probar la voz del DJ ---
+    pg = nueva(b, 3123)
+    pg.wait_for_selector('#btnProbarVoz'); time.sleep(0.3)
+    pg.click('#btnProbarVoz'); pg.wait_for_function("document.getElementById('estadoVoz').textContent.includes('Suena')", timeout=15000)
+    time.sleep(0.5)
+    a = pg.evaluate("(() => { const a = document.getElementById('pruebaAudio'); return {paused: a.paused, t: a.currentTime}; })()")
+    ok('H1. la prueba de voz reproduce el audio', not a['paused'] and a['t'] > 0.2, str(a))
+    pg.route('**/api/locucion', lambda r: r.fulfill(status=500, content_type='application/json', body=json.dumps({'success': False, 'detalle': 'ElevenLabs (401)', 'error': 'No se pudo generar la locución'})))
+    time.sleep(4.5)  # que acabe la anterior
+    pg.click('#btnProbarVoz'); pg.wait_for_function("document.getElementById('estadoVoz').classList.contains('error')", timeout=10000)
+    ok('H2. si falla, se muestra qué servicio y por qué', 'ElevenLabs (401)' in pg.inner_text('#estadoVoz'), pg.inner_text('#estadoVoz'))
+    pg.context.close()
+    b.close(); s2.terminate(); s3.terminate()
 
 fallos = [n for n, c in resultados if not c]
 print(f'\n{len(resultados)-len(fallos)}/{len(resultados)} comprobaciones OK'); sys.exit(1 if fallos else 0)
