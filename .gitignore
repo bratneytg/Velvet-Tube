@@ -3,3 +3,4 @@ node_modules/
 .DS_Store
 *.zip
 cache.json
+e2e/*.png
