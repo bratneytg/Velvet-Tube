@@ -1,0 +1,20 @@
+{
+  "name": "velvet-tube",
+  "version": "0.1.0",
+  "description": "Radio con DJ de IA sobre YouTube: listas con IA, reproducción desde YouTube y un locutor entre canciones",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google/genai": "^3.3.0",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0"
+  }
+}
