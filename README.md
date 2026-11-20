@@ -59,11 +59,17 @@ npm test                 # 33 pruebas automáticas (sin red ni claves)
 No hace falta ninguna credencial de OAuth: la búsqueda usa solo la clave de API y la reproducción no requiere cuenta.
 Nunca subas el `.env` al repositorio.
 
-### Despliegue (Render)
+### Despliegue en Render (para usarla desde cualquier dispositivo)
 
-Servicio web de Node: *Build* `npm install`, *Start* `npm start`, y las variables de arriba. Render gratis duerme el servicio tras un
-rato sin uso (tarda ~50 s en despertar) y borra el disco al reiniciar, así que la caché de búsquedas en archivo (`CACHE_FILE`) se
-pierde; las listas guardadas del usuario no, porque viven en su navegador.
+1. En [render.com](https://render.com): **New → Blueprint** → elige este repositorio. Render lee `render.yaml` y te pide las cuatro claves
+   (`YOUTUBE_API_KEY`, `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `ACCESS_CODE`). **Es ahí donde se pegan las claves.**
+   Más tarde se cambian en el panel del servicio: *Environment*.
+2. Pulsa **Apply**. Cuando termine, abre la URL `https://velvet-tube-xxxx.onrender.com`, escribe tu `ACCESS_CODE` y listo.
+   Cada dispositivo la abre con esa misma URL (en el iPhone: Compartir → Añadir a pantalla de inicio).
+
+Cada `git push` a `main` redespliega solo. Render gratis duerme el servicio tras un rato sin uso (tarda ~50 s en despertar) y borra el disco
+al reiniciar, así que la caché de búsquedas en archivo (`CACHE_FILE`) se pierde; las listas guardadas no, porque viven en el navegador de cada dispositivo
+(no se comparten entre dispositivos).
 
 ## Cómo funciona el DJ entre canciones
 

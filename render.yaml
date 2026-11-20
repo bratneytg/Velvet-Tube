@@ -1,0 +1,26 @@
+# Plano ("Blueprint") para Render: crea el servicio web con todo configurado.
+# Las claves NO van aquí (sync: false): Render te las pide al crear el servicio y las guarda cifradas.
+services:
+  - type: web
+    name: velvet-tube
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ACCESS_CODE        # el código que escribirás al abrir la web en cada dispositivo
+        sync: false
+      - key: CIUDAD
+        value: Munich
