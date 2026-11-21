@@ -83,6 +83,7 @@ button, select { touch-action: manipulation; }
 .vista label { font-size: 12px; color: var(--texto2); font-weight: 600; display: block; margin-bottom: 4px; }
 .vista textarea, .vista select, #inputCodigo { background: #2a2a2a; border: 1px solid var(--borde); color: #fff; padding: 10px; border-radius: 6px; font-size: 14px; width: 100%; }
 .vista textarea { resize: vertical; }
+#rangoVolVoz { width: 100%; accent-color: var(--neon); }
 .fila { display: flex; gap: 10px; }
 .fila > div { flex: 1; min-width: 0; }
 .check { display: flex !important; align-items: center; gap: 8px; margin: 0 !important; }

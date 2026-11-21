@@ -99,6 +99,11 @@
               <option value="en-f" data-i18n="vozEnF"></option><option value="en-m" data-i18n="vozEnM"></option>
             </select></div>
         </div>
+        <div>
+          <label for="rangoVolVoz"><span data-i18n="volVoz"></span>: <span id="volVozValor">100%</span></label>
+          <input id="rangoVolVoz" type="range" min="0" max="100" step="5" value="100" />
+          <p id="avisoVolVozIos" class="estado" hidden data-i18n="volVozIos"></p>
+        </div>
         <label for="inputAmbiente" data-i18n="ambienteLabel"></label>
         <textarea id="inputAmbiente" maxlength="300" rows="2" data-i18n-placeholder="ambientePlaceholder"></textarea>
         <label class="check"><input type="checkbox" id="chkUbicacion" /> <span data-i18n="usarUbicacion"></span></label>

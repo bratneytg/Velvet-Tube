@@ -26,7 +26,7 @@ const TXT = {
     tabCrear: 'Crear', tabCola: 'Cola', tabGuardadas: 'Guardadas',
     promptLabel: '¿Qué quieres escuchar?', promptPlaceholder: 'Ej.: es por la mañana y quiero empezar el día con música energizante',
     cantidad: 'Canciones', djHabla: 'El DJ habla', cadaCancion: 'Cada canción', cada2: 'Cada 2 canciones', cada3: 'Cada 3 canciones',
-    voz: 'Voz del DJ', vozEsF: 'Español · mujer', vozEsM: 'Español · hombre', vozEnF: 'English · woman', vozEnM: 'English · man',
+    voz: 'Voz del DJ', volVoz: 'Volumen de la voz', volVozIos: 'En iPhone, el volumen de la voz se cambia con los botones del dispositivo.', vozEsF: 'Español · mujer', vozEsM: 'Español · hombre', vozEnF: 'English · woman', vozEnM: 'English · man',
     ambienteLabel: 'Pedido para el DJ (opcional)', ambientePlaceholder: 'Ej.: estoy en una cena romántica',
     usarUbicacion: 'Usar mi ubicación para el clima', crear: 'Crear y reproducir', pensando: 'Pensando la lista…',
     sinLista: 'Crea una lista para empezar', colaVacia: 'Aún no hay lista. Créala en la pestaña Crear.',
@@ -55,7 +55,7 @@ const TXT = {
     tabCrear: 'Create', tabCola: 'Queue', tabGuardadas: 'Saved',
     promptLabel: 'What do you want to listen to?', promptPlaceholder: 'E.g.: it is morning and I want to start the day with energetic music',
     cantidad: 'Songs', djHabla: 'DJ speaks', cadaCancion: 'Every song', cada2: 'Every 2 songs', cada3: 'Every 3 songs',
-    voz: 'DJ voice', vozEsF: 'Español · mujer', vozEsM: 'Español · hombre', vozEnF: 'English · woman', vozEnM: 'English · man',
+    voz: 'DJ voice', volVoz: 'Voice volume', volVozIos: 'On iPhone, change the voice volume with the device buttons.', vozEsF: 'Español · mujer', vozEsM: 'Español · hombre', vozEnF: 'English · woman', vozEnM: 'English · man',
     ambienteLabel: 'Request for the DJ (optional)', ambientePlaceholder: 'E.g.: I am having a romantic dinner',
     usarUbicacion: 'Use my location for the weather', crear: 'Create and play', pensando: 'Thinking up the list…',
     sinLista: 'Create a list to start', colaVacia: 'No list yet. Create one in the Create tab.',
@@ -98,8 +98,10 @@ function aplicarIdioma() {
 // ---------------------------------------------------------------------------
 const leerJson = (clave, def) => { try { return JSON.parse(localStorage.getItem(clave)) ?? def; } catch { return def; } };
 const guardarJson = (clave, valor) => { try { localStorage.setItem(clave, JSON.stringify(valor)); } catch { /* sin espacio o modo privado */ } };
-const AJ = Object.assign({ idioma: (navigator.language || 'es').toLowerCase().startsWith('es') ? 'es' : 'en', voz: null, freq: 1, cantidad: 20, dj: true, ambiente: '', ubicacion: false, video: false, codigo: '' }, leerJson('vt_ajustes', {}));
+const AJ = Object.assign({ idioma: (navigator.language || 'es').toLowerCase().startsWith('es') ? 'es' : 'en', voz: null, volVoz: 100, freq: 1, cantidad: 20, dj: true, ambiente: '', ubicacion: false, video: false, codigo: '' }, leerJson('vt_ajustes', {}));
 const guardarAjustes = () => guardarJson('vt_ajustes', AJ);
+// Volumen de la voz del DJ: 0-100 % del volumen del dispositivo (independiente del volumen de la música). Un valor guardado inválido vale 100 %.
+const volVozFrac = () => { const v = Number(AJ.volVoz); return Number.isFinite(v) ? Math.min(100, Math.max(0, v)) / 100 : 1; };
 const idSesion = (() => { let s = localStorage.getItem('vt_sesion'); if (!s) { s = crypto.randomUUID().replace(/-/g, '').slice(0, 20); try { localStorage.setItem('vt_sesion', s); } catch { /* ok */ } } return s; })();
 
 // ---------------------------------------------------------------------------
@@ -422,7 +424,7 @@ async function iniciarVoz({ solape }) {
   if (tok !== S.token || !S.hablando) return false;
 
   djAudio.onended = () => finVoz(tok);
-  djAudio.currentTime = 0; djAudio.volume = 1;
+  djAudio.currentTime = 0; djAudio.volume = volVozFrac();
   try { await djAudio.play(); }
   catch (e) { // el navegador no deja sonar sin un toque del usuario: se descarta esta locución y la música sigue
     console.warn('[DJ] reproducción bloqueada:', e.message);
@@ -709,7 +711,7 @@ async function probarVoz() {
     const { url, bytes } = urlDeBase64(res.audioBase64);
     await cargarEnElemento(pruebaAudio, url, bytes);
     pruebaAudio.onended = () => URL.revokeObjectURL(url);
-    pruebaAudio.currentTime = 0; pruebaAudio.volume = 1;
+    pruebaAudio.currentTime = 0; pruebaAudio.volume = volVozFrac();
     await pruebaAudio.play();
     est.textContent = t('pruebaSuena', { g: res.guion });
   } catch (e) {
@@ -735,6 +737,11 @@ document.querySelectorAll('.lang-btn').forEach(b => {
   };
 });
 $('selVoz').onchange = (e) => { AJ.voz = e.target.value; guardarAjustes(); descartarLocucionPreparada(); };
+$('rangoVolVoz').oninput = (e) => { // se aplica en directo a la locución (y a la prueba de voz) que esté sonando
+  AJ.volVoz = Number(e.target.value); $('volVozValor').textContent = `${AJ.volVoz}%`;
+  try { djAudio.volume = volVozFrac(); pruebaAudio.volume = volVozFrac(); } catch { /* ok */ }
+};
+$('rangoVolVoz').onchange = guardarAjustes;
 $('selFreq').onchange = (e) => { AJ.freq = Number(e.target.value); S.freq = AJ.freq; guardarAjustes(); };
 $('selCantidad').onchange = (e) => { AJ.cantidad = Number(e.target.value); guardarAjustes(); };
 $('inputAmbiente').onchange = (e) => { AJ.ambiente = e.target.value.trim(); guardarAjustes(); descartarLocucionPreparada(); };
@@ -763,6 +770,9 @@ async function iniciar() {
   idioma = AJ.idioma;
   if (!AJ.voz) AJ.voz = `${idioma}-f`;
   S.djActivo = !!AJ.dj; S.freq = AJ.freq;
+  const vv = Number.isFinite(Number(AJ.volVoz)) ? Math.min(100, Math.max(0, Number(AJ.volVoz))) : 100;
+  $('rangoVolVoz').value = String(vv); $('volVozValor').textContent = `${vv}%`;
+  if (ES_IOS) { $('rangoVolVoz').disabled = true; $('avisoVolVozIos').hidden = false; } // iOS ignora el volumen de los elementos <audio>
   $('selVoz').value = AJ.voz; $('selFreq').value = String(AJ.freq); $('selCantidad').value = String(AJ.cantidad);
   $('inputAmbiente').value = AJ.ambiente; $('chkUbicacion').checked = AJ.ubicacion;
   $('notaMovil').hidden = !ES_MOVIL;
