@@ -84,13 +84,18 @@ export async function generarGuionLocutor(cancionAnterior, cancionSiguiente, { t
   const peticion = ambiente
     ? `Listener's request (very important, apply it on top of the focus above): "${ambiente}". Adapt the tone and content of the link to it, while still leading into the next song.`
     : '';
+  // El idioma por defecto es el de la voz, pero la petición del oyente manda: si pide otro idioma, TODO el texto va en ese idioma.
+  // Se dice de forma explícita y destacada porque, si no, las locuciones anteriores (en el idioma de la voz) arrastran al modelo.
+  const reglaIdioma = ambiente
+    ? `LANGUAGE (highest priority): write the link in ${lengua} by default. BUT if the listener's request above asks for a different language (for example "speak to me in French", "háblame en italiano", "in Portuguese please"), you MUST write the ENTIRE link in that language instead, even if your previous links were in ${lengua}. Only song titles and artist names stay untouched.`
+    : '';
   const evitar = ultimosGuiones.length
-    ? `- Do NOT reuse the openings, phrases or structure of your previous links:\n${ultimosGuiones.map(g => `      "${g}"`).join('\n')}`
+    ? `- Do NOT reuse the openings, phrases or structure of your previous links (they may be in another language: that must NOT influence the language of this one):\n${ultimosGuiones.map(g => `      "${g}"`).join('\n')}`
     : '';
 
   const prompt = `
     Act as a charismatic, sensual, deep and modern ${locutor} radio host.
-    You are a ${locutor} host speaking ${lengua}${idioma === 'es' ? ', so use the grammatical forms that match a ' + locutor + ' speaker' : ''}.
+    You are a ${locutor} host. Your default language is ${lengua}${idioma === 'es' ? ', so use the grammatical forms that match a ' + locutor + ' speaker' : ''}.
     Your job is a quick, entertaining link between the song that is ending and the one coming up next.
 
     - Song that is ending: "${cancionAnterior}"
@@ -99,9 +104,10 @@ export async function generarGuionLocutor(cancionAnterior, cancionSiguiente, { t
 
     Focus of this link: ${INSTRUCCIONES[tipoEfectivo]}
     ${peticion}
+    ${reglaIdioma}
 
     Rules:
-    - Short text in ${lengua} (unless the listener's request asks for another language), ${ambiente ? 65 : 55} words maximum.
+    - Short text (default language ${lengua}; see the LANGUAGE rule if the listener asked for another one), ${ambiente ? 65 : 55} words maximum.
     - Keep song titles and artist names exactly as they are (do not translate them). Any weather or time data above is given in English: say it naturally in ${lengua}.
     - It must flow naturally and always lead into the next song, so the listener hears its title and artist.
     - Sound like a real radio host: fresh, varied, never formulaic. Do not start every link the same way (avoid always opening with "Hey").
